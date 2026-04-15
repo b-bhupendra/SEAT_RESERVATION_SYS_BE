@@ -4,7 +4,7 @@ from ..db_core import get_db
 from . import model_bills as schemas
 from ..customers.model_customers import DBCustomer
 from ..auth_user.dependencies import RoleChecker
-from typing import List
+from typing import List, Optional
 import uuid
 
 router = APIRouter(prefix="/api", tags=["billing"])
