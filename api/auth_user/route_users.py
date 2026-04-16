@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from ..db_core import get_db
 from . import model_users as schemas
 from typing import List
+from ..customers.model_customers import DBCustomer
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -53,7 +54,8 @@ def seed_data(db: Session = Depends(get_db)):
         roles = [
             {"name": "admin", "description": "Full System Access", "permissions": "all"},
             {"name": "manager", "description": "Department Manager", "permissions": "read,write,notify"},
-            {"name": "staff", "description": "Floor Staff", "permissions": "read,write_reservations"}
+            {"name": "staff", "description": "Floor Staff", "permissions": "read,write_reservations"},
+            {"name": "customer", "description": "Seat Occupant", "permissions": "read_my_data"}
         ]
         for r in roles:
             db.add(schemas.DBRole(**r))
@@ -83,6 +85,28 @@ def seed_data(db: Session = Depends(get_db)):
             full_name="Department Manager"
         )
         db.add(manager_user)
+
+        customer_user = schemas.DBUser(
+            email="customer@example.com",
+            hashed_password=get_password_hash("customer123"),
+            role="customer",
+            full_name="Robert Moore"
+        )
+        db.add(customer_user)
+        db.flush()
+
+        # Link DBCustomer to DBUser
+        existing_cust = db.query(DBCustomer).filter(DBCustomer.email == "customer@example.com").first()
+        if not existing_cust:
+            new_cust = DBCustomer(
+                name="Robert Moore",
+                email="customer@example.com",
+                phone="9876543210",
+                user_id=customer_user.id
+            )
+            db.add(new_cust)
+        else:
+            existing_cust.user_id = customer_user.id
 
     db.commit()
     return {"msg": "User and role data seeded. Use admin@admin.com / admin"}

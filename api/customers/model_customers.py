@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from ..db_core import Base
@@ -15,6 +15,7 @@ class DBCustomer(Base):
     phone = Column(String)
     status = Column(String, default="active")
     avatar = Column(String, nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     first_contact = Column(DateTime, default=datetime.utcnow)
 
 # Pydantic Models
