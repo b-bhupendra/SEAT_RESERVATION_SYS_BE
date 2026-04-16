@@ -4,13 +4,14 @@ from ..db_core import get_db
 from . import model_users as schemas
 from typing import List
 from ..customers.model_customers import DBCustomer
+from .dependencies import RoleChecker
 
 router = APIRouter(prefix="/api", tags=["users"])
 
 from .auth_utils import verify_password, create_access_token, get_password_hash
 
 @router.post("/auth/login")
-def login(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
+def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
     user = db.query(schemas.DBUser).filter(schemas.DBUser.email == user_data.email).first()
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
