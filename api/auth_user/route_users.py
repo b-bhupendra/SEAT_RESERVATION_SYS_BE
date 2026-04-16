@@ -20,12 +20,18 @@ def login(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
         )
     
     access_token = create_access_token(data={"sub": user.email, "role": user.role})
+    
+    # Fetch permissions for the role
+    role_data = db.query(schemas.DBRole).filter(schemas.DBRole.name == user.role).first()
+    permissions = role_data.permissions if role_data else ""
+
     return {
         "user": {
             "id": user.id,
             "email": user.email,
             "role": user.role,
-            "full_name": user.full_name
+            "full_name": user.full_name,
+            "permissions": permissions
         },
         "access_token": access_token,
         "token_type": "bearer"
@@ -47,15 +53,32 @@ def get_roles(page: int = 1, size: int = 10, db: Session = Depends(get_db)):
     query = db.query(schemas.DBRole)
     return paginate(query, page, size)
 
+@router.post("/roles", response_model=schemas.Role, status_code=status.HTTP_201_CREATED)
+def create_role(role_in: schemas.RoleBase, db: Session = Depends(get_db), _=Depends(RoleChecker(["admin"]))):
+    """
+    Creates a new system role. 
+    Permissions should be a comma-separated string of keys (e.g. 'view_dashboard,manage_billing').
+    """
+    existing = db.query(schemas.DBRole).filter(schemas.DBRole.name == role_in.name.lower()).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Role with this name already exists")
+    
+    db_role = schemas.DBRole(**role_in.dict())
+    db_role.name = db_role.name.lower() # Normalize names
+    db.add(db_role)
+    db.commit()
+    db.refresh(db_role)
+    return db_role
+
 @router.post("/seed")
 def seed_data(db: Session = Depends(get_db)):
     # Seed roles if empty
     if not db.query(schemas.DBRole).first():
         roles = [
-            {"name": "admin", "description": "Full System Access", "permissions": "all"},
-            {"name": "manager", "description": "Department Manager", "permissions": "read,write,notify"},
-            {"name": "staff", "description": "Floor Staff", "permissions": "read,write_reservations"},
-            {"name": "customer", "description": "Seat Occupant", "permissions": "read_my_data"}
+            {"name": "admin", "description": "Full System Access", "permissions": "*"},
+            {"name": "manager", "description": "Department Manager", "permissions": "view_dashboard,manage_reservations,manage_customers,manage_billing,view_notifications"},
+            {"name": "staff", "description": "Floor Staff", "permissions": "manage_reservations,manage_customers,view_notifications"},
+            {"name": "customer", "description": "Seat Occupant", "permissions": "view_portal,view_notifications"}
         ]
         for r in roles:
             db.add(schemas.DBRole(**r))
