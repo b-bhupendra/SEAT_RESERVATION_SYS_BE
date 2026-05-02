@@ -73,64 +73,75 @@ def create_role(role_in: schemas.RoleBase, db: Session = Depends(get_db), _=Depe
 
 @router.post("/seed")
 def seed_data(db: Session = Depends(get_db)):
-    # Seed roles if empty
-    if not db.query(schemas.DBRole).first():
-        roles = [
-            {"name": "admin", "description": "Full System Access", "permissions": "*"},
-            {"name": "manager", "description": "Department Manager", "permissions": "view_dashboard,manage_reservations,manage_customers,manage_billing,view_notifications"},
-            {"name": "staff", "description": "Floor Staff", "permissions": "manage_reservations,manage_customers,view_notifications"},
-            {"name": "customer", "description": "Seat Occupant", "permissions": "view_portal,view_notifications"}
-        ]
-        for r in roles:
-            db.add(schemas.DBRole(**r))
+    # Upsert Roles
+    roles_data = [
+        {"name": "admin", "description": "Full System Access", "permissions": "*"},
+        {"name": "manager", "description": "Department Manager", "permissions": "view_dashboard,manage_reservations,manage_customers,manage_billing,view_notifications"},
+        {"name": "staff", "description": "Floor Staff", "permissions": "manage_reservations,manage_customers,view_notifications"},
+        {"name": "customer", "description": "Seat Occupant", "permissions": "view_portal,view_notifications"}
+    ]
     
-    # Seed default admin if empty
-    if not db.query(schemas.DBUser).filter(schemas.DBUser.email == "admin@admin.com").first():
-        admin_user = schemas.DBUser(
-            email="admin@admin.com",
-            hashed_password=get_password_hash("admin"),
-            role="admin",
-            full_name="System Admin"
-        )
-        db.add(admin_user)
-        
-        staff_user = schemas.DBUser(
-            email="staff@admin.com",
-            hashed_password=get_password_hash("staff123"),
-            role="staff",
-            full_name="Operations Staff"
-        )
-        db.add(staff_user)
-
-        manager_user = schemas.DBUser(
-            email="manager@admin.com",
-            hashed_password=get_password_hash("manager123"),
-            role="manager",
-            full_name="Department Manager"
-        )
-        db.add(manager_user)
-
-        customer_user = schemas.DBUser(
-            email="customer@example.com",
-            hashed_password=get_password_hash("customer123"),
-            role="customer",
-            full_name="Robert Moore"
-        )
-        db.add(customer_user)
-        db.flush()
-
-        # Link DBCustomer to DBUser
-        existing_cust = db.query(DBCustomer).filter(DBCustomer.email == "customer@example.com").first()
-        if not existing_cust:
-            new_cust = DBCustomer(
-                name="Robert Moore",
-                email="customer@example.com",
-                phone="9876543210",
-                user_id=customer_user.id
-            )
-            db.add(new_cust)
+    for r_data in roles_data:
+        role = db.query(schemas.DBRole).filter(schemas.DBRole.name == r_data["name"]).first()
+        if not role:
+            db.add(schemas.DBRole(**r_data))
         else:
-            existing_cust.user_id = customer_user.id
+            role.permissions = r_data["permissions"]
+            role.description = r_data["description"]
+
+    db.flush()
+
+    # Upsert Users
+    test_users = [
+        {
+            "email": "admin@admin.com",
+            "password": "admin",
+            "role": "admin",
+            "full_name": "System Administrator"
+        },
+        {
+            "email": "manager@admin.com",
+            "password": "manager123",
+            "role": "manager",
+            "full_name": "Jane Manager"
+        },
+        {
+            "email": "customer@example.com",
+            "password": "customer123",
+            "role": "customer",
+            "full_name": "Robert Moore"
+        }
+    ]
+
+    for u_data in test_users:
+        user = db.query(schemas.DBUser).filter(schemas.DBUser.email == u_data["email"]).first()
+        if not user:
+            new_user = schemas.DBUser(
+                email=u_data["email"],
+                hashed_password=get_password_hash(u_data["password"]),
+                role=u_data["role"],
+                full_name=u_data["full_name"]
+            )
+            db.add(new_user)
+            db.flush()
+            user = new_user
+        else:
+            user.role = u_data["role"]
+            user.full_name = u_data["full_name"]
+
+        # Link DBCustomer if user is a customer
+        if u_data["role"] == "customer":
+            existing_cust = db.query(DBCustomer).filter(DBCustomer.email == u_data["email"]).first()
+            if not existing_cust:
+                new_cust = DBCustomer(
+                    name=u_data["full_name"],
+                    email=u_data["email"],
+                    phone="9876543210",
+                    user_id=user.id
+                )
+                db.add(new_cust)
+            else:
+                existing_cust.user_id = user.id
 
     db.commit()
-    return {"msg": "User and role data seeded. Use admin@admin.com / admin"}
+    return {"msg": "System synchronized. All roles and test users are now live."}
