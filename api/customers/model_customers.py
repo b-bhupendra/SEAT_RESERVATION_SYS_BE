@@ -1,0 +1,47 @@
+from sqlalchemy import Column, String, DateTime, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
+from ..db_core import Base
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime
+
+# SQLAlchemy Models
+class DBCustomer(Base):
+    __tablename__ = "customers"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String)
+    email = Column(String)
+    phone = Column(String)
+    status = Column(String, default="pending")
+    avatar = Column(String, nullable=True)
+    profile_photo = Column(String, nullable=True)
+    documents = Column(JSON, default=list)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    first_contact = Column(DateTime, default=datetime.utcnow)
+    organization = Column(String, nullable=True)
+    sub_organization = Column(String, nullable=True)
+
+# Pydantic Models
+class CustomerBase(BaseModel):
+    name: str
+    email: str
+    phone: str
+    status: str = "pending"
+    avatar: Optional[str] = None
+    profile_photo: Optional[str] = None
+    documents: Optional[List[str]] = []
+    organization: Optional[str] = None
+    sub_organization: Optional[str] = None
+    seat_number: Optional[str] = None
+    plan_cost: Optional[float] = None
+
+class Customer(CustomerBase):
+    id: uuid.UUID
+    first_contact: datetime
+    class Config:
+        from_attributes = True
+
+class CustomerTransferRequest(BaseModel):
+    new_organization: str
+    new_sub_organization: str
