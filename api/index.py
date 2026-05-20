@@ -1,12 +1,13 @@
 import os # Server heartbeat: PhonePe simulation mode enabled
 import sys
 import uuid
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+from sqlalchemy.orm import Session
 
 # Ensure parent directory is in sys.path so 'app' module can be imported on Vercel
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -23,7 +24,7 @@ from app.routers.billing import router as payment_router
 from .settings.route_settings import router as settings_router
 from .reservations.route_seats import router as seats_router
 
-from .db_core import engine, Base
+from .db_core import engine, Base, get_db
 # Import models here to ensure they are registered with Base metadata for table creation
 from .customers.model_customers import DBCustomer
 from .reservations.model_reservations import DBReservation
@@ -69,9 +70,16 @@ app.include_router(payment_router)
 app.include_router(settings_router)
 app.include_router(seats_router)
 
+from sqlalchemy import text
+
 @app.get("/api/health")
-def health_check():
-    return {"status": "ok", "db": "connected", "supabase": "ready" if supabase_client else "not configured"}
+def health_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    return {"status": "ok", "db": db_status, "supabase": "ready" if supabase_client else "not configured"}
 
 @app.post("/api/notify", status_code=status.HTTP_201_CREATED, tags=["notifications"])
 async def notify_realtime(notification: NotificationNotify):
