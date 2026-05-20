@@ -1,10 +1,15 @@
 import os # Server heartbeat: PhonePe simulation mode enabled
+import sys
 import uuid
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+
+# Ensure parent directory is in sys.path so 'app' module can be imported on Vercel
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 load_dotenv()
 from .auth_user.route_users import router as user_router
@@ -34,10 +39,16 @@ class NotificationNotify(BaseModel):
     user_id: uuid.UUID
     message: str
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create tables
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Warning: Database tables could not be created automatically: {e}")
+    yield
 
-app = FastAPI(title="Lumina Pro API")
+app = FastAPI(title="Lumina Pro API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
