@@ -143,3 +143,41 @@ def test_settings_endpoints(client, db):
     # Verify DB reflects change
     setting = db.query(DBSetting).filter(DBSetting.key == "seat_hold_duration_minutes").first()
     assert setting.value == "20"
+
+def test_seats_cleanup(client, db):
+    org = "Trisha Library"
+    sub_org = "Premium Zone"
+
+    # Create seat
+    s = DBSeat(seat_number="S-020", organization=org, sub_organization=sub_org)
+    c = DBCustomer(name="Cust Expire Cron", email="cust_exp_cron@test.com", phone="123456", status="active")
+    db.add_all([s, c])
+    db.commit()
+
+    # Set hold duration config to 10 minutes
+    dur_setting = DBSetting(key="seat_hold_duration_minutes", value="10")
+    db.add(dur_setting)
+    db.commit()
+
+    # Create a pending hold created 12 minutes ago (expired!)
+    r = DBReservation(
+        customer_id=c.id,
+        seat_number="S-020",
+        subsection=sub_org,
+        organization=org,
+        sub_organization=sub_org,
+        start_date=datetime.utcnow() - timedelta(minutes=12),
+        status="pending",
+        created_at=datetime.utcnow() - timedelta(minutes=12)
+    )
+    db.add(r)
+    db.commit()
+
+    # Trigger cron cleanup endpoint without token (should succeed unless CRON_SECRET is set)
+    resp = client.post("/api/seats/cleanup")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "success"
+
+    # Verify reservation status in DB was updated to cancelled
+    db.refresh(r)
+    assert r.status == "cancelled"

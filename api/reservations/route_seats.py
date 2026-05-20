@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -181,3 +181,23 @@ def generate_seats(
         db.commit()
 
     return {"message": f"Successfully generated {len(created_seats)} seats.", "count": len(created_seats)}
+
+@router.post("/seats/cleanup")
+def trigger_cleanup(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Cron endpoint to periodically clean up expired seat holds.
+    Can be protected by a CRON_SECRET token injected by Vercel.
+    """
+    import os
+    cron_secret = os.getenv("CRON_SECRET")
+    if cron_secret and authorization != f"Bearer {cron_secret}":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized cron invocation"
+        )
+        
+    cleanup_expired_holds(db)
+    return {"status": "success", "message": "Expired holds cleaned up successfully."}
